@@ -176,6 +176,12 @@ class CmdPlayer(CmdPositioner):
     def pollFish(self):
         """Wait until a fish appears. (right clicking afterwards will catch the fish)"""
         self.conn.sendReceive("poll.fish")
+    def pollPlayers(self):
+        """Wait until another player appears."""
+        self.conn.sendReceive("poll.player")
+    def disconnect(self):
+        """Disconnect from the server."""
+        self.conn.send("server.disconnect")
 
 class CmdCamera:
     def __init__(self, connection):

@@ -23,6 +23,9 @@ import java.util.Set;
 
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiMainMenu;
+import net.minecraft.client.gui.GuiMultiplayer;
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.EntityRenderer;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.Entity;
@@ -38,6 +41,7 @@ import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.nbt.NBTException;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.potion.PotionEffect;
+import net.minecraft.realms.RealmsBridge;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumParticleTypes;
 import net.minecraft.util.math.BlockPos;
@@ -53,6 +57,8 @@ public class APIHandler {
 	protected static final String CLICKLEFT = "click.left";
 	protected static final String CLICKRIGHT = "click.right";
 	protected static final String POLLFISH = "poll.fish";
+	protected static final String POLLPLAYER = "poll.player";
+	protected static final String SERVERDISCONNECT = "server.disconnect";
 
 	// world.checkpoint.save/restore, player.setting, world.setting(nametags_visible,*),
 	// camera.setFixed() unsupported
@@ -830,20 +836,18 @@ public class APIHandler {
 		else if (cmd.equals(POLLFISH)) {
 			new Thread() {
 				public void run() {
-					float y = 0.0f;
 					int count = 0;
 					while (true) {
 						try {
-							Thread.sleep(100);
-							Entity entity = Minecraft.getMinecraft().thePlayer.fishEntity;
+							Thread.sleep(50);
+							Entity entity = mc.thePlayer.fishEntity;
 							if (entity != null) {
-								int new_y = entity.getPosition().getY();
-								float delta = new_y - y;
-								if (count > 5 && -0.99 > delta && delta > -1.01) {
+								System.out.println(count);
+								System.out.println(entity.motionY);
+								if (count > 5 && entity.motionY < -0.11) {
 									sendLine("got.fish");
 									return;
 								}
-								y = new_y;
 								count++;
 							}
 						} catch (Throwable t) {
@@ -854,11 +858,44 @@ public class APIHandler {
 				}
 			}.start();
 		}
+		else if (cmd.equals(POLLPLAYER)) {
+			new Thread() {
+				public void run() {
+					while (true) {
+						try {
+							Thread.sleep(100);
+							if (mc.theWorld.playerEntities.size() > 1) {
+								sendLine("got.player");
+								return;
+							}
+						} catch (Throwable t) {
+							RaspberryJamMod.LOGGER.error("Error waiting for players");
+							RaspberryJamMod.LOGGER.catching(t);
+						}
+					}
+				}
+			}.start();
+		}
+		else if (cmd.equals(SERVERDISCONNECT)) {
+			// stolen from Minecraft's "GuiIngameMenu"
+			mc.theWorld.sendQuittingDisconnectingPacket();
+			mc.loadWorld((WorldClient)null);
+			boolean onIntegrated = mc.isIntegratedServerRunning();
+			boolean onRealms = mc.isConnectedToRealms();
+			if (onIntegrated) {
+				mc.displayGuiScreen(new GuiMainMenu());
+			} else if (onRealms) {
+				RealmsBridge realmsbridge = new RealmsBridge();
+                realmsbridge.switchToRealms(new GuiMainMenu());
+			} else {
+				mc.displayGuiScreen(new GuiMultiplayer(new GuiMainMenu()));
+			}
+		}
 		else {
 			unknownCommand();
 		}
 	}
-	
+
 	private static void toggle(KeyBinding k) {
 		try {
 			// toggle key quickly

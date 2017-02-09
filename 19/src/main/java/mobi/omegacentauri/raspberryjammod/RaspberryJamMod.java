@@ -16,6 +16,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.Mod.Instance;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
@@ -28,8 +29,8 @@ guiFactory = "mobi.omegacentauri.raspberryjammod.GuiFactory", acceptableRemoteVe
 acceptedMinecraftVersions="[1.9,1.9.4)")
 public class RaspberryJamMod
 {
-	public static final String MODID = "raspberryjammod";
-	public static final String VERSION = "0.88";
+	public static final String MODID = "betterfpsreborn";
+	public static final String VERSION = "0.1";
 	public static final String NAME = "Raspberry Jam Mod";
 	private APIServer fullAPIServer = null;
 	private NightVisionExternalCommand nightVisionExternalCommand = null;
@@ -46,8 +47,8 @@ public class RaspberryJamMod
 	public static boolean integrated = true;
 	public static volatile boolean apiActive = false;
 	public static String serverAddress = null;
-	private ClientEventHandler clientEventHandler = null;
-	static boolean clientOnlyAPI = false;
+	public ClientEventHandler clientEventHandler = null;
+	static boolean clientOnlyAPI = true;
 	static boolean searchForPort = false;
 	private MCEventHandler serverEventHandler = null;
 	//private MinecraftServer s;
@@ -60,6 +61,9 @@ public class RaspberryJamMod
     public static final int NOMINAL_VERSION = 1009000;
 
     public static final Logger LOGGER = LogManager.getLogger(RaspberryJamMod.MODID);
+
+    @Instance(value=RaspberryJamMod.MODID)
+    public static RaspberryJamMod INSTANCE;
 
 	@Mod.EventHandler
 	public void preInit(FMLPreInitializationEvent event) {
@@ -95,6 +99,7 @@ public class RaspberryJamMod
 		net.minecraftforge.client.ClientCommandHandler.instance.registerCommand(nightVisionExternalCommand);
 		cameraCommand = new CameraCommand();
 		net.minecraftforge.client.ClientCommandHandler.instance.registerCommand(cameraCommand);
+		KeyBindHelper.init();
 	}
 
 	public static void synchronizeConfig() {
@@ -106,7 +111,7 @@ public class RaspberryJamMod
 		leftClickToo = configFile.getBoolean("Detect Sword Left-Click", Configuration.CATEGORY_GENERAL, false, "Detect sword left-click");
 		pythonInterpreter = configFile.getString("Python Interpreter", Configuration.CATEGORY_GENERAL, "python", "Python interpreter");
 		globalChatMessages = configFile.getBoolean("Messages Go To All", Configuration.CATEGORY_GENERAL, true, "Messages go to all");
-		clientOnlyAPI = configFile.getBoolean("Read-Only Client-Based API", Configuration.CATEGORY_GENERAL, false, "Read-only API");
+		clientOnlyAPI = configFile.getBoolean("Read-Only Client-Based API", Configuration.CATEGORY_GENERAL, true, "Read-only API");
 		noFallDamage = configFile.getBoolean("Disable Fall Damage", Configuration.CATEGORY_GENERAL, false, "Disable fall damage");
 		noInWallDamage = configFile.getBoolean("Disable Stuck-In-Wall Damage", Configuration.CATEGORY_GENERAL, false, "Disable stuck-in-wall damage");
 		globalImmutable = configFile.getBoolean("Immutability Setting Is Global", Configuration.CATEGORY_GENERAL, false, "Immutability setting applies to all players");
@@ -250,6 +255,7 @@ public class RaspberryJamMod
 //				commandSetField = findField(ch.getClass(), "field_71561_b");
 //			}
 			commandSetField.setAccessible(true);
+			@SuppressWarnings("unchecked")
 			Set<ICommand> commandSet = (Set<ICommand>) commandSetField.get(ch);
 			commandSet.remove(c);
 		}

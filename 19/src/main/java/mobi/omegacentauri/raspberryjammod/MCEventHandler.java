@@ -149,6 +149,10 @@ abstract public class MCEventHandler {
 		return Block.getIdFromBlock(pos.world.getBlockState(pos).getBlock());
 	}
 
+	public String getBlockName(int id) {
+		return Block.getBlockById(id).getUnlocalizedName();
+	}
+
 	public void setPause(boolean b) {
 		pause = b;
 	}

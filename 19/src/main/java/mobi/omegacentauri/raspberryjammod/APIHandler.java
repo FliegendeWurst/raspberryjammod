@@ -6,7 +6,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
 import java.security.MessageDigest;
@@ -22,12 +21,9 @@ import java.util.Scanner;
 import java.util.Set;
 
 import net.minecraft.block.Block;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiMainMenu;
-import net.minecraft.client.gui.GuiMultiplayer;
-import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.EntityRenderer;
-import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityList;
 import net.minecraft.entity.EntityLiving;
@@ -41,7 +37,6 @@ import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.nbt.NBTException;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.potion.PotionEffect;
-import net.minecraft.realms.RealmsBridge;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumParticleTypes;
 import net.minecraft.util.math.BlockPos;
@@ -51,14 +46,21 @@ import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
+import net.minecraftforge.common.ForgeHooks;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 
 public class APIHandler {
-	protected static final String CLICKLEFT = "click.left";
-	protected static final String CLICKRIGHT = "click.right";
-	protected static final String POLLFISH = "poll.fish";
-	protected static final String POLLPLAYER = "poll.player";
+	// global commands
 	protected static final String SERVERDISCONNECT = "server.disconnect";
+	protected static final String POLLBLOCKBROKEN = "event.poll.brokenblock";
+	protected static final String POLLFISH = "event.poll.fish";
+	protected static final String POLLPLAYER = "event.poll.player";
+
+	// player/entity commands
+	protected static final String POLLHEALTH = "event.poll.health";
+	protected static final String GETBREAKINGTIME = "getBreakingTime";
+	protected static final String RAYTRACE = "raytrace";
+	protected static final String CANBREAK = "canBreak";
 
 	// world.checkpoint.save/restore, player.setting, world.setting(nametags_visible,*),
 	// camera.setFixed() unsupported
@@ -70,6 +72,7 @@ public class APIHandler {
 	protected static final String SETBLOCK = "world.setBlock";
 	protected static final String SETBLOCKS = "world.setBlocks"; 
 	protected static final String GETBLOCK = "world.getBlock";
+	protected static final String GETBLOCKNAME = "world.getBlockName";
 	protected static final String GETBLOCKWITHDATA = "world.getBlockWithData";
 	protected static final String GETBLOCKS = "world.getBlocks";
 	protected static final String GETBLOCKSWITHDATA = "world.getBlocksWithData";
@@ -466,6 +469,8 @@ public class APIHandler {
 	}
 
 	void process(String clientSentence) throws IOException {
+		RaspberryJamMod.LOGGER.info("Processing sentence: "+clientSentence);
+
 		if (!authenticated) {
 			handleAuthentication(clientSentence);
 			return;
@@ -594,10 +599,19 @@ public class APIHandler {
 			eventHandler.queueServerAction(setState);
 		}
 		else if (cmd.equals(GETBLOCK)) {
-			Location pos = getBlockLocation(scan);
-			int id = eventHandler.getBlockId(pos);
+			int x = scan.nextInt();
+			int y = scan.nextInt();
+			int z = scan.nextInt();
+			BlockPos pos = new BlockPos(x, y, z);
+			int id = Block.getIdFromBlock(mc.theWorld.getBlockState(pos).getBlock());
 
 			sendLine(id);
+		}
+		else if (cmd.equals(GETBLOCKNAME)) {
+			int id = scan.nextInt();
+			String name = eventHandler.getBlockName(id);
+
+			sendLine(name);
 		}
 		else if (cmd.equals(GETBLOCKWITHDATA)) {
 			if (includeNBTWithData) {
@@ -722,7 +736,7 @@ public class APIHandler {
 					if (player != null) 
 						entityCommand(player.getEntityId(), subcommand, scan);
 					else
-						fail("Player not found");
+						fail("Player not found (no.2)");
 					return;
 				}
 			}
@@ -827,11 +841,8 @@ public class APIHandler {
 		else if (cmd.equals(APIVERSION)) {
 			sendLine(RaspberryJamMod.MODID+","+RaspberryJamMod.VERSION+","+"java"+","+mcVersion());
 		}
-		else if (cmd.equals(CLICKLEFT)) {
-			toggle(mc.gameSettings.keyBindAttack);
-		}
-		else if (cmd.equals(CLICKRIGHT)) {
-			toggle(mc.gameSettings.keyBindUseItem);
+		else if (cmd.startsWith("key.")) {
+			KeyBindHelper.handleCommand(cmd, scan);
 		}
 		else if (cmd.equals(POLLFISH)) {
 			new Thread() {
@@ -840,11 +851,9 @@ public class APIHandler {
 					while (true) {
 						try {
 							Thread.sleep(50);
-							Entity entity = mc.thePlayer.fishEntity;
-							if (entity != null) {
-								System.out.println(count);
-								System.out.println(entity.motionY);
-								if (count > 5 && entity.motionY < -0.11) {
+							if (mc.thePlayer != null && mc.thePlayer.fishEntity != null) {
+								Entity entity = mc.thePlayer.fishEntity;
+								if (count > 10 && entity.motionY < -0.11) {
 									sendLine("got.fish");
 									return;
 								}
@@ -879,6 +888,7 @@ public class APIHandler {
 		else if (cmd.equals(SERVERDISCONNECT)) {
 			// stolen from Minecraft's "GuiIngameMenu"
 			mc.theWorld.sendQuittingDisconnectingPacket();
+			/*
 			mc.loadWorld((WorldClient)null);
 			boolean onIntegrated = mc.isIntegratedServerRunning();
 			boolean onRealms = mc.isConnectedToRealms();
@@ -890,23 +900,19 @@ public class APIHandler {
 			} else {
 				mc.displayGuiScreen(new GuiMultiplayer(new GuiMainMenu()));
 			}
+			*/
+		}
+		else if (cmd.equals(POLLBLOCKBROKEN)) {
+			new Thread() {
+				public void run() {
+					RaspberryJamMod.INSTANCE.clientEventHandler.getBlockBroken();
+					try { while (!RaspberryJamMod.INSTANCE.clientEventHandler.getBlockBroken()) {Thread.sleep(100); } } catch (InterruptedException e) {}
+					sendLine("block.broken");
+				}
+			}.start();
 		}
 		else {
 			unknownCommand();
-		}
-	}
-
-	private static void toggle(KeyBinding k) {
-		try {
-			// toggle key quickly
-			KeyBinding.setKeyBindState(k.getKeyCode(), true);
-			KeyBinding.onTick(k.getKeyCode());
-			try { Thread.sleep(32); } catch (InterruptedException e) {}
-			KeyBinding.setKeyBindState(k.getKeyCode(), false);
-			//KeyBinding.onTick(k.getKeyCode()); // this breaks fishing???
-		} catch (Exception e) {
-			RaspberryJamMod.LOGGER.error("Error toggling key "+k);
-			e.printStackTrace((PrintStream) RaspberryJamMod.LOGGER);
 		}
 	}
 
@@ -1072,7 +1078,6 @@ public class APIHandler {
 		e.addChatMessage(new TextComponentString(msg));
 	}
 	
-
 	protected void chat(String msg) {
 		if (RaspberryJamMod.globalChatMessages) {
 			globalMessage(msg);
@@ -1192,7 +1197,7 @@ public class APIHandler {
 	}
 
 	protected void entityCommand(int id, String cmd, Scanner scan) {
-		Entity e = getServerEntityByID(id);
+		final Entity e = getServerEntityByID(id);
 		if (e == null) {
 			fail("cannot find entity");
 			return;
@@ -1233,11 +1238,62 @@ public class APIHandler {
 		else if (cmd.equals(GETNAME)) {
 			entityGetNameAndUUID(id);
 		}
+		else if (cmd.equals(RAYTRACE)) {
+			sendLine(e.rayTrace(scan.nextDouble(), 0).getBlockPos());
+		}
+		else if (cmd.equals(GETBREAKINGTIME)) {
+			double x = scan.nextInt();
+			double y = scan.nextInt();
+			double z = scan.nextInt();
+			BlockPos look = new BlockPos(x, y, z);
+			IBlockState state = mc.theWorld.getBlockState(look);
+
+			// logic from here: http://greyminecraftcoder.blogspot.de/2015/01/calculating-rate-of-damage-when-mining.html
+
+			double result = 1.0/(
+					(mc.thePlayer.getBreakSpeed(state, look)/state.getBlockHardness(mc.theWorld, look))
+					*(1.0/(ForgeHooks.canHarvestBlock(state.getBlock(), mc.thePlayer, mc.theWorld, look) ? 30 : 100))
+					)
+					/20 // ticks/second
+			;
+			sendLine(result);
+		}
+		else if (cmd.equals(CANBREAK)) {
+			double x = scan.nextInt();
+			double y = scan.nextInt();
+			double z = scan.nextInt();
+			BlockPos look = new BlockPos(x, y, z);
+			IBlockState state = mc.theWorld.getBlockState(look);
+			sendLine(ForgeHooks.canHarvestBlock(state.getBlock(), mc.thePlayer, mc.theWorld, look));
+		}
+		else if (cmd.equals(POLLHEALTH)) {
+			final float target = scan.nextFloat();
+			new Thread() {
+				public void run() {
+					while (true) {
+						try {
+							Thread.sleep(50);
+							if (mc.thePlayer != null) {
+								//System.out.println(mc.thePlayer.getHealth() + " > " + target);
+								float health = mc.thePlayer.getHealth();
+								if (health >= target) {
+									sendLine(health);
+									return;
+								}
+							}
+						} catch (Throwable t) {
+							RaspberryJamMod.LOGGER.error("Error waiting for health regenerating");
+							RaspberryJamMod.LOGGER.catching(t);
+						}
+					}
+				}
+			}.start();
+		}
 		else {
 			unknownCommand();
 		}
 	}
-	
+
 	protected void entityGetNameAndUUID(int id) {
 		Entity e = getServerEntityByID(id);
         if (e == null) {
@@ -1484,6 +1540,10 @@ public class APIHandler {
 
 	protected void sendLine(int x) {
 		sendLine(Integer.toString(x));
+	}
+
+	protected void sendLine(boolean x) {
+		sendLine(Boolean.toString(x));
 	}
 
 	protected void sendLine(Vec3d v) {

@@ -3,10 +3,18 @@ package mobi.omegacentauri.raspberryjammod;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.MobEffects;
 import net.minecraft.potion.PotionEffect;
+import net.minecraft.util.SoundCategory;
+import net.minecraft.util.SoundEvent;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.IWorldEventListener;
+import net.minecraft.world.World;
 import net.minecraftforge.client.event.RenderLivingEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.world.WorldEvent;
@@ -16,12 +24,13 @@ import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
-public class ClientEventHandler {
+public class ClientEventHandler implements IWorldEventListener {
 	private volatile boolean nightVision = false;
 	private int clientTickCount = 0;
 	private MCEventHandlerClientOnly apiEventHandler = null;
 	private APIServer apiServer = null;
 //	private boolean registeredCommands = false;
+	private boolean blockBroken = false;
 
 	@SubscribeEvent
 	@SideOnly(Side.CLIENT)
@@ -92,6 +101,8 @@ public class ClientEventHandler {
 	@SideOnly(Side.CLIENT)
 	@SubscribeEvent
 	public void onWorldLoaded(WorldEvent.Load event) {
+		event.getWorld().addEventListener(this);
+
 		RaspberryJamMod.synchronizeConfig();
 		RaspberryJamMod.LOGGER.info("Loading world: "+event.getWorld());
 
@@ -142,6 +153,24 @@ public class ClientEventHandler {
 			catch (Exception e) {}
 	}
 
+	public void playEvent(EntityPlayer player, int code, BlockPos pos, int blockId) {
+		EntityPlayerSP realPlayer = Minecraft.getMinecraft().thePlayer;
+		if (code == 2001 && player == null && realPlayer != null
+				&& realPlayer.getDistanceSq(pos) < 46
+				&& realPlayer.rayTrace(4.5, 0).getBlockPos().equals(pos)
+				&& realPlayer.isSwingInProgress) { // 50 == 5 blocks (max. 4)
+			this.blockBroken = true;
+		}
+	}
+
+	public boolean getBlockBroken() {
+		boolean x = this.blockBroken;
+		if (this.blockBroken) {
+			this.blockBroken = false;
+		}
+		return x;
+	}
+
 	public void closeAPI() {
 		RaspberryJamMod.closeAllScripts();
 		for (int i = RaspberryJamMod.scriptExternalCommands.size()-1; i>=0; i--) {
@@ -162,4 +191,34 @@ public class ClientEventHandler {
 			apiServer = null;
 		}
 	}
+
+	public void notifyBlockUpdate(World worldIn, BlockPos pos,
+			IBlockState oldState, IBlockState newState, int flags) {}
+
+	public void notifyLightSet(BlockPos pos) {}
+
+	public void markBlockRangeForRenderUpdate(int x1, int y1, int z1, int x2,
+			int y2, int z2) {}
+
+	public void playSoundToAllNearExcept(EntityPlayer player,
+			SoundEvent soundIn, SoundCategory category, double x, double y,
+			double z, float volume, float pitch) {}
+
+	public void playRecord(SoundEvent soundIn, BlockPos pos) {}
+
+	public void spawnParticle(int particleID, boolean ignoreRange,
+			double xCoord, double yCoord, double zCoord, double xOffset,
+			double yOffset, double zOffset, int... parameters) {}
+
+	public void onEntityAdded(Entity entityIn) {}
+
+	public void onEntityRemoved(Entity entityIn) {}
+
+	public void broadcastSound(int soundID, BlockPos pos, int data) {}
+
+	public void playAuxSFX(EntityPlayer player, int sfxType,
+			BlockPos blockPosIn, int data) {}
+
+	@Override
+	public void sendBlockBreakProgress(int breakerId, BlockPos pos, int progress) {}
 }

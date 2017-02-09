@@ -281,6 +281,9 @@ class Minecraft:
         """Get block (x,y,z) => id:int"""
         return int(self.conn.sendReceive_flat("world.getBlock", floorFlatten(args)))
 
+    def getBlockName(self, id):
+        return self.conn.sendReceive("world.getBlockName", id)
+
     def getBlockWithData(self, *args):
         """Get block with data (x,y,z) => Block"""
         ans = self.conn.sendReceive_flat("world.getBlockWithData", floorFlatten(args))

@@ -11,6 +11,8 @@
 111/.metadata/
 111/.project
 111/.settings/
+111/*.launch
+111/bin/
 111/build/
 111/src/
 19/.classpath
